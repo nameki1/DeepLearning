@@ -1,0 +1,129 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+import torchvision
+import torchvision.transforms as transforms
+
+from PIL import Image, ImageOps
+
+import tqdm
+
+
+batch_size = 32
+epoch = 10
+
+
+# 学習データのダウンロード
+traindata = torchvision.datasets.MNIST(
+    root='./dataset',
+    train=True,
+    download=True,
+    transform=transforms.ToTensor()
+)
+# 学習データを扱いやすい形に
+trainloader = torch.utils.data.DataLoader(
+    traindata,
+    batch_size=batch_size,
+    shuffle=True
+)
+# テストデータのダウンロード
+testdata = torchvision.datasets.MNIST(
+    root='./dataset',
+    train=False,
+    download=True,
+    transform=transforms.ToTensor()
+)
+# テストデータを扱いやすい形に
+testloader = torch.utils.data.DataLoader(
+    testdata,
+    batch_size=batch_size,
+    shuffle=True
+)
+
+# ネットワークモデルの設定
+class Net(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(28*28,100)
+        self.fc2 = nn.Linear(100,10)
+        
+    def forward(self, x):
+        x = x.view(-1,28*28)
+        x = self.fc1(x)
+        x = torch.sigmoid(x)
+        x = self.fc2(x)
+        x = F.softmax(x,dim=1)
+        return x
+    
+# モデルの初期化
+net = Net()
+
+# 損失関数
+criterion = nn.CrossEntropyLoss()
+
+# 最適化アルゴリズム
+optimizer = optim.Adam(net.parameters(), lr=0.001)
+
+
+# 学習
+def train():
+    # 学習データ数(今回は60000)/batch_size 回だけ繰り返す
+    for i, (inputs,labels) in enumerate(trainloader):
+        # 計算情報の初期化
+        optimizer.zero_grad()
+        # ニューラルネットワークの計算
+        output = net(inputs)
+        # 損失関数を使って評価
+        loss = criterion(output, labels)
+        # どのパラメータをどれくらい調整するか計算する
+        loss.backward()
+        # 最適化アルゴリズムでパラメータを調整
+        optimizer.step()
+
+    
+# テスト
+def test():
+    correct,total = 0,0
+    
+    # テストデータ数(今回は10000) / batch_size 回だけ繰り返す
+    for i, (inputs,labels) in enumerate(testloader):
+        # ニューラルネットワークの計算
+        output = net(inputs)
+
+        # ニューラルネットワークの出力を選択
+        _, predicted = output.max(1)
+        # 出力と実際の数字がいくつあっているかを計算
+        correct += predicted.eq(labels).sum().item()
+
+    # 100*正解した数 / テストデータ数 = 正答率
+    print('Acc: %.2f%%' % (100*correct/10000))
+
+# 自分の手書き数字を分類する
+def Check():
+    # 画像ファイルを開く
+    img = Image.open("output.png")
+    # 白黒反転
+    img = ImageOps.invert(img)
+    # 28×28にリサイズ
+    img = img.resize((28,28))
+    # tensorに変換
+    convert_tensor = transforms.functional.to_tensor(img)
+
+    # 学習済みモデルで評価
+    output=net(convert_tensor)
+    _, predicted = output.max(1)
+    
+    return predicted[0].item()
+    
+    
+
+# main
+def main():
+    # epoch回、学習を繰り返す
+    print("学習開始")
+    for e in tqdm.tqdm(range(1,epoch+1)):
+        train()
+    test()
+    
